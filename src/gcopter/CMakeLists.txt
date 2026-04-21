@@ -23,6 +23,10 @@ find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 
+
+
+
+add_subdirectory(fastdem)
 # 包含头文件目录
 include_directories(
   include
@@ -36,13 +40,11 @@ add_executable(global_planning src/global_planning.cpp)
 # 链接依赖库
 target_link_libraries(global_planning
   ${OMPL_LIBRARIES}
+   fastdem
+   ${EIGEN3_LIBRARIES}
 )
 
 # 使用 ament_target_dependencies 添加 ROS2 依赖
-target_link_libraries(global_planning
-  ${EIGEN3_LIBRARIES}
-)
-
 ament_target_dependencies(global_planning
   rclcpp
   std_msgs
