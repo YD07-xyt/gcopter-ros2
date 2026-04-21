@@ -88,7 +88,7 @@ public:
         wayPointsMarker.scale.z = 0.35;
 
         trajMarker = routeMarker;
-        trajMarker.header.frame_id = "odom";
+        trajMarker.header.frame_id = "world";
         trajMarker.id = 0;
         trajMarker.ns = "trajectory";
         trajMarker.color.r = 0.00;
@@ -196,7 +196,7 @@ public:
 
         meshMarker.id = 0;
         meshMarker.header.stamp = node->now();
-        meshMarker.header.frame_id = "odom";
+        meshMarker.header.frame_id = "world";
         meshMarker.pose.orientation.w = 1.00;
         meshMarker.action = visualization_msgs::msg::Marker::ADD;
         meshMarker.type = visualization_msgs::msg::Marker::TRIANGLE_LIST;
@@ -260,7 +260,7 @@ public:
         sphereMarkers.id = 0;
         sphereMarkers.type = visualization_msgs::msg::Marker::SPHERE_LIST;
         sphereMarkers.header.stamp = node->now();
-        sphereMarkers.header.frame_id = "odom";
+        sphereMarkers.header.frame_id = "world";
         sphereMarkers.pose.orientation.w = 1.00;
         sphereMarkers.action = visualization_msgs::msg::Marker::ADD;
         sphereMarkers.ns = "spheres";
@@ -295,7 +295,7 @@ public:
         sphereMarkers.id = sg;
         sphereMarkers.type = visualization_msgs::msg::Marker::SPHERE_LIST;
         sphereMarkers.header.stamp = node->now();
-        sphereMarkers.header.frame_id = "odom";
+        sphereMarkers.header.frame_id = "world";
         sphereMarkers.pose.orientation.w = 1.00;
         sphereMarkers.action = visualization_msgs::msg::Marker::ADD;
         sphereMarkers.ns = "StartGoal";
