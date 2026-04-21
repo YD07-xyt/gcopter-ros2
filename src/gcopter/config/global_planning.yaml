@@ -1,6 +1,6 @@
 global_planning_node:
   ros__parameters:
-    map_topic:                   '/lio/cloud_world'
+    map_topic:                   '/mock_map'
 
     target_topic:                '/goal_pose'
 
