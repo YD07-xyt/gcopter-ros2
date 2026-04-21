@@ -102,15 +102,24 @@ private:
     Config config;
 
     rclcpp::Node::SharedPtr nh;
+    //点云地图
+    //TODO： 离线生成地图---->实时地图
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr mapSub;
+    //目的点，起始点 
+    // TODO：改为直接收目的点，起始点 使用odom
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr targetSub;
 
+    //map是否初始化
     bool mapInitialized;
+    //TODO：珊格地图---->grid_map+esdf+高程地图 
     voxel_map::VoxelMap voxelMap;
+    //ros2 可视化
     Visualizer visualizer;
+    //起始点 
     std::vector<Eigen::Vector3d> startGoal;
-
+    //轨迹
     Trajectory<5> traj;
+    //轨迹采样时间
     double trajStamp;
 
 public:
@@ -121,14 +130,17 @@ public:
           mapInitialized(false),
           visualizer(nh)
     {
-       const Eigen::Vector3i xyz((config.mapBound[1] - config.mapBound[0]) / config.voxelWidth,
+        //init voxel map 地图尺寸
+       const Eigen::Vector3i map_xyz((config.mapBound[1] - config.mapBound[0]) / config.voxelWidth,
                                   (config.mapBound[3] - config.mapBound[2]) / config.voxelWidth,
                                   (config.mapBound[5] - config.mapBound[4]) / config.voxelWidth);
-
+        //地图起始点
         const Eigen::Vector3d offset(config.mapBound[0], config.mapBound[2], config.mapBound[4]);
 
-        voxelMap = voxel_map::VoxelMap(xyz, offset, config.voxelWidth);
+        voxelMap = voxel_map::VoxelMap(map_xyz, offset, config.voxelWidth);
+        //===========================================================================//
 
+        
         mapSub = nh->create_subscription<sensor_msgs::msg::PointCloud2>(
             config.mapTopic,
             rclcpp::SensorDataQoS(),
@@ -149,6 +161,7 @@ public:
     inline void mapCallBack(const sensor_msgs::msg::PointCloud2::SharedPtr &msg)
     {
         //RCLCPP_INFO(nh->get_logger(), "Received map point cloud with %zu points", msg->data.size() / msg->point_step);
+        //TODO： 初始化一次--->实时
         if (!mapInitialized)
         {
             size_t cur = 0;
@@ -178,6 +191,7 @@ public:
     inline void plan()
     {
         RCLCPP_INFO(nh->get_logger(), "Planning from %zu start/goal pairs", startGoal.size());
+        //TODO：优化起始点的输入
         if (startGoal.size() == 2)
         {
             std::vector<Eigen::Vector3d> route;

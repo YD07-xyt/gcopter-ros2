@@ -42,14 +42,14 @@
 namespace sfc_gen
 {
 
-    template <typename Map>
-    inline double planPath(const Eigen::Vector3d &s,
-                           const Eigen::Vector3d &g,
-                           const Eigen::Vector3d &lb,
-                           const Eigen::Vector3d &hb,
-                           const Map *mapPtr,
-                           const double &timeout,
-                           std::vector<Eigen::Vector3d> &p)
+        template <typename Map>
+        double planPath(const Eigen::Vector3d &s,      // 起点
+                        const Eigen::Vector3d &g,      // 终点
+                        const Eigen::Vector3d &lb,     // 下界（地图范围）
+                        const Eigen::Vector3d &hb,     // 上界
+                        const Map *mapPtr,              // 地图指针（需支持 query()）
+                        const double &timeout,          // 规划超时
+                        std::vector<Eigen::Vector3d> &p)// 输出路径点
     {
         auto space(std::make_shared<ompl::base::RealVectorStateSpace>(3));
 
