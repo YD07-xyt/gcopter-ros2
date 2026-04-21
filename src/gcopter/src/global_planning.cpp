@@ -11,6 +11,8 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <rclcpp/subscription.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
+#include <nav_msgs/msg/odometry.hpp>
+
 
 #include <cmath>
 #include <iostream>
@@ -23,6 +25,7 @@ struct Config
 {
     std::string mapTopic = "/map";
     std::string targetTopic = "/target";
+    std::string odomTopic = "/odom";
     double dilateRadius = 0.2;
     double voxelWidth = 0.1;
     std::vector<double> mapBound = {-10.0, 10.0, -10.0, 10.0, -5.0, 5.0};
@@ -49,6 +52,7 @@ struct Config
         // 声明参数（带默认值）
         node->declare_parameter<std::string>("map_topic", mapTopic);
         node->declare_parameter<std::string>("target_topic", targetTopic);
+        node->declare_parameter<std::string>("odom_topic", odomTopic);
         node->declare_parameter<double>("dilate_radius", dilateRadius);
         node->declare_parameter<double>("voxel_width", voxelWidth);
         node->declare_parameter<std::vector<double>>("map_bound", mapBound);
@@ -73,6 +77,7 @@ struct Config
         // 读取参数（将实际值赋给成员变量）
         node->get_parameter("map_topic", mapTopic);
         node->get_parameter("target_topic", targetTopic);
+        node->get_parameter("odom_topic", odomTopic);
         node->get_parameter("dilate_radius", dilateRadius);
         node->get_parameter("voxel_width", voxelWidth);
         node->get_parameter("map_bound", mapBound);
@@ -108,6 +113,7 @@ private:
     //目的点，起始点 
     // TODO：改为直接收目的点，起始点 使用odom
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr targetSub;
+    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odomSub;
 
     //map是否初始化
     bool mapInitialized;
@@ -115,8 +121,9 @@ private:
     voxel_map::VoxelMap voxelMap;
     //ros2 可视化
     Visualizer visualizer;
-    //起始点 
-    std::vector<Eigen::Vector3d> startGoal;
+    //起始点 和目的点
+    std::optional<Eigen::Vector3d> start_, goal_;
+    //std::vector<Eigen::Vector3d> startGoal;
     //轨迹
     Trajectory<5> traj;
     //轨迹采样时间
@@ -156,8 +163,37 @@ public:
                 targetCallBack(msg);
             }
         );
+        odomSub = nh->create_subscription<nav_msgs::msg::Odometry>(
+            config.odomTopic,
+            rclcpp::QoS(10),
+            [this](const nav_msgs::msg::Odometry::SharedPtr msg) {
+                odomCallBack(msg);
+            }
+        );
     }
+    inline void odomCallBack(const nav_msgs::msg::Odometry::SharedPtr &msg)
+    {
+        RCLCPP_INFO(nh->get_logger(), "Received odometry with position (%.2f, %.2f, %.2f)", msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z);
+        if (mapInitialized)
+        {
+            const Eigen::Vector3d start(msg->pose.pose.position.x,
+                                        msg->pose.pose.position.y,
+                                        msg->pose.pose.position.z);
+            if (voxelMap.query(start) == 0)
+            {
+                //visualizer.visualizeStartGoal(start, 0.5, startGoal.size());
+                start_=start;
+                //startGoal.emplace_back(start);
+            }
+            else
+            {
+                RCLCPP_WARN(nh->get_logger(), "Infeasible Position Selected !!!");
+            }
 
+            plan();
+        }
+        return;
+    }
     inline void mapCallBack(const sensor_msgs::msg::PointCloud2::SharedPtr &msg)
     {
         //RCLCPP_INFO(nh->get_logger(), "Received map point cloud with %zu points", msg->data.size() / msg->point_step);
@@ -190,13 +226,13 @@ public:
 
     inline void plan()
     {
-        RCLCPP_INFO(nh->get_logger(), "Planning from %zu start/goal pairs", startGoal.size());
-        //TODO：优化起始点的输入
-        if (startGoal.size() == 2)
+        //RCLCPP_INFO(nh->get_logger(), "Planning from %zu start/goal pairs", startGoal.size());
+
+        if (start_.has_value()&&goal_.has_value())
         {
             std::vector<Eigen::Vector3d> route;
-            sfc_gen::planPath<voxel_map::VoxelMap>(startGoal[0],
-                                                   startGoal[1],
+            sfc_gen::planPath<voxel_map::VoxelMap>(start_.value(),
+                                                   goal_.value(),
                                                    voxelMap.getOrigin(),
                                                    voxelMap.getCorner(),
                                                    &voxelMap, 0.01,
@@ -288,18 +324,19 @@ public:
         RCLCPP_INFO(nh->get_logger(), "Received target pose with position (%.2f, %.2f, %.2f)", msg->pose.position.x, msg->pose.position.y, msg->pose.position.z);
         if (mapInitialized)
         {
-            if (startGoal.size() >= 2)
-            {
-                startGoal.clear();
-            }
+            // if (startGoal.size() >= 2)
+            // {
+            //     startGoal.clear();
+            // }
             const double zGoal = config.mapBound[4] + config.dilateRadius +
                                  fabs(msg->pose.orientation.z) *
                                      (config.mapBound[5] - config.mapBound[4] - 2 * config.dilateRadius);
             const Eigen::Vector3d goal(msg->pose.position.x, msg->pose.position.y, zGoal);
             if (voxelMap.query(goal) == 0)
             {
-                visualizer.visualizeStartGoal(goal, 0.5, startGoal.size());
-                startGoal.emplace_back(goal);
+                // visualizer.visualizeStartGoal(goal, 0.5, startGoal.size());
+                // startGoal.emplace_back(goal);
+                goal_=goal;
             }
             else
             {

@@ -22,7 +22,7 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
-
+find_package(nav_msgs REQUIRED)
 
 
 
@@ -51,6 +51,7 @@ ament_target_dependencies(global_planning
   geometry_msgs
   sensor_msgs
   visualization_msgs
+  nav_msgs
 )
 
 # 安装规则
