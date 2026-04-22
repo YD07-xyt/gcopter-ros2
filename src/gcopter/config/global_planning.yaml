@@ -3,7 +3,8 @@ global_planning_node:
     map_topic:                   '/mock_map'
 
     target_topic:                '/goal_pose'
-
+    
+    odom_topic:                  '/lio/odom'
     dilate_radius:               0.5
 
     voxel_width:                 0.25

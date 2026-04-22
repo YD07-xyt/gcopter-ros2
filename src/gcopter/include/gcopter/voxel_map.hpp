@@ -21,11 +21,10 @@
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE.
 */
-
-#ifndef VOXEL_MAP_HPP
-#define VOXEL_MAP_HPP
+#pragma once
 
 #include "voxel_dilater.hpp"
+#include <cstdint>
 #include <memory>
 #include <vector>
 #include <Eigen/Eigen>
@@ -35,7 +34,16 @@ namespace voxel_map
 
     constexpr uint8_t Unoccupied = 0;
     constexpr uint8_t Occupied = 1;
+    constexpr uint8_t Unkown =3;
     constexpr uint8_t Dilated = 2; // 膨胀后的障碍物
+
+    struct voxelState
+    {
+        uint8_t state;
+        float height = 0.0f;
+        float slope = 0.0f;
+        voxelState() : state(Unoccupied) {}
+    };
 
     class VoxelMap
     {
@@ -46,18 +54,18 @@ namespace voxel_map
                  const Eigen::Vector3d &origin,
                  const double &voxScale)
             : mapSize(size),
-              o(origin),//地图原点
+              origin(origin),//地图原点
               scale(voxScale),//每个体素的边长（分辨率）
               voxNum(mapSize.prod()),//总体素数
               step(1, mapSize(0), mapSize(1) * mapSize(0)),//索引步长 (1, sizeX, sizeX*sizeY)，用于将 3D 索引展平为 1D
-              oc(o + Eigen::Vector3d::Constant(0.5 * scale)),//体素中心偏移
+              oc(origin + Eigen::Vector3d::Constant(0.5 * scale)),//体素中心偏移
               bounds((mapSize.array() - 1) * step.array()),//最大合法索引边界
               stepScale(step.cast<double>().cwiseInverse() * scale),//从体素索引到世界坐标的转换系数
               voxels(voxNum, Unoccupied) {}//体素状态数组（展平的一维存储）
 
     private:
         Eigen::Vector3i mapSize;
-        Eigen::Vector3d o;//地图原点
+        Eigen::Vector3d origin;//地图原点
         double scale;//每个体素的边长（分辨率）
         int voxNum;//总体素数
         Eigen::Vector3i step;//索引步长 (1, sizeX, sizeX*sizeY)，用于将 3D 索引展平为 1D
@@ -80,12 +88,12 @@ namespace voxel_map
 
         inline Eigen::Vector3d getOrigin(void) const
         {
-            return o;
+            return origin;
         }
 
         inline Eigen::Vector3d getCorner(void) const
         {
-            return mapSize.cast<double>() * scale + o;
+            return mapSize.cast<double>() * scale + origin;
         }
 
         inline const std::vector<uint8_t> &getVoxels(void) const
@@ -95,7 +103,7 @@ namespace voxel_map
 
         inline void setOccupied(const Eigen::Vector3d &pos)
         {
-            const Eigen::Vector3i id = ((pos - o) / scale).cast<int>();
+            const Eigen::Vector3i id = ((pos - origin) / scale).cast<int>();
             if (id(0) >= 0 && id(1) >= 0 && id(2) >= 0 &&
                 id(0) < mapSize(0) && id(1) < mapSize(1) && id(2) < mapSize(2))
             {
@@ -190,7 +198,7 @@ namespace voxel_map
         //碰撞查询
         inline bool query(const Eigen::Vector3d &pos) const
         {
-            const Eigen::Vector3i id = ((pos - o) / scale).cast<int>();
+            const Eigen::Vector3i id = ((pos - origin) / scale).cast<int>();
             if (id(0) >= 0 && id(1) >= 0 && id(2) >= 0 &&
                 id(0) < mapSize(0) && id(1) < mapSize(1) && id(2) < mapSize(2))
             {
@@ -222,9 +230,8 @@ namespace voxel_map
         //体素索引 → 世界坐标（返回体素中心）
         inline Eigen::Vector3i posD2I(const Eigen::Vector3d &pos) const
         {
-            return ((pos - o) / scale).cast<int>();
+            return ((pos - origin) / scale).cast<int>();
         }
     };
 }
 
-#endif
