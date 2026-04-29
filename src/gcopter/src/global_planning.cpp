@@ -119,6 +119,7 @@ private:
     bool mapInitialized;
     //TODO：珊格地图---->grid_map+esdf+高程地图 
     voxel_map::VoxelMap voxelMap;
+    map::GridMap gridMap;
     //ros2 可视化
     Visualizer visualizer;
     //起始点 和目的点
