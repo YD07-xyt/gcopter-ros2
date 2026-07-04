@@ -1,0 +1,60 @@
+global_planning_node:
+  ros__parameters:
+  
+    map_topic: '/rog_map/terrain_map'
+    target_topic: '/goal_pose'
+    #odom_topic: '/fake_odom'
+    odom_topic: '/lio/base_odom'
+
+    
+    dilate_radius: 0.2
+    voxel_width: 0.1
+    # 地图边界 [x_min, x_max, y_min, y_max, z_min, z_max]（米）
+    map_bound: [-20.0, 20.0, -20.0, 20.0, -15.0, 15.0]
+
+    
+    timeout_rrt: 0.05
+    
+
+    max_vel_mag: 4.0
+    
+
+    max_bdr_mag: 2.1
+    
+
+    max_tilt_angle: 0.0
+    
+
+    min_thrust: 0.0
+
+    max_thrust: 120.0
+    
+
+    vehicle_mass: 19.0
+    
+
+    grav_acc: 9.8
+    
+
+    horiz_drag: 0.05
+
+    vert_drag: 0.80
+    
+
+    paras_drag: 0.01
+    
+
+    speed_eps: 0.0001
+    
+
+    weight_t: 20.0
+    
+
+    chi_vec: [1.0e+4, 1.0e+4, 1.0e+4, 0.0, 1.0e+5]
+
+    smoothing_eps: 1.0e-2
+    
+
+    integral_intervs: 16
+    
+    rel_cost_tol: 1.0e-5

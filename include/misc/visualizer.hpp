@@ -1,0 +1,517 @@
+#ifndef VISUALIZER_HPP
+#define VISUALIZER_HPP
+
+#include "../gcopter/geo_utils.hpp"
+#include "../gcopter/quickhull.hpp"
+#include "../gcopter/trajectory.hpp"
+#include <chrono>
+#include <cmath>
+#include <iostream>
+#include <memory>
+#include <nav_msgs/msg/detail/path__struct.hpp>
+#include <spdlog/spdlog.h>
+
+#include <geometry_msgs/msg/point.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <nav_msgs/msg/path.hpp>
+#include <rclcpp/logging.hpp>
+#include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/detail/point_cloud2__struct.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <std_msgs/msg/float64.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
+// Visualizer for the planner
+class Visualizer {
+private:
+  // config contains the scale for some markers
+  rclcpp::Node::SharedPtr node;
+
+  // These are publishers for path, waypoints on the trajectory,
+  // the entire trajectory, the mesh of free-space polytopes,
+  // the edge of free-space polytopes, and spheres for safety radius
+  rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr routePub;
+  rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr wayPointsPub;
+  rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr trajectoryPub;
+  rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr meshPub;
+  rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr edgePub;
+  rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr spherePub;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr Mappub; // Mappub
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr
+      SurfMapPub; // SurfMappub
+  rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr GlobalPathPub;
+  rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr OptPathPub;
+
+public:
+  rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr speedPub;
+  rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr thrPub;
+  rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr tiltPub;
+  rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr bdrPub;
+
+public:
+  Visualizer(rclcpp::Node::SharedPtr node) : node(node) {
+    routePub = node->create_publisher<visualization_msgs::msg::Marker>(
+        "/visualizer/route", 10);
+    wayPointsPub = node->create_publisher<visualization_msgs::msg::Marker>(
+        "/visualizer/waypoints", 10);
+    trajectoryPub = node->create_publisher<visualization_msgs::msg::Marker>(
+        "/visualizer/trajectory", 10);
+    meshPub = node->create_publisher<visualization_msgs::msg::Marker>(
+        "/visualizer/mesh", 1000);
+    edgePub = node->create_publisher<visualization_msgs::msg::Marker>(
+        "/visualizer/edge", 1000);
+    spherePub = node->create_publisher<visualization_msgs::msg::Marker>(
+        "/visualizer/spheres", 1000);
+    speedPub = node->create_publisher<std_msgs::msg::Float64>(
+        "/visualizer/speed", 1000);
+    thrPub = node->create_publisher<std_msgs::msg::Float64>(
+        "/visualizer/total_thrust", 1000);
+    tiltPub = node->create_publisher<std_msgs::msg::Float64>(
+        "/visualizer/tilt_angle", 1000);
+    bdrPub = node->create_publisher<std_msgs::msg::Float64>(
+        "/visualizer/body_rate", 1000);
+    Mappub = node->create_publisher<sensor_msgs::msg::PointCloud2>(
+        "/visualizer/map", 1000);
+    SurfMapPub = node->create_publisher<sensor_msgs::msg::PointCloud2>(
+        "/visualizer/surf_map", 1000);
+    GlobalPathPub = node->create_publisher<nav_msgs::msg::Path>(
+        "/visualizer/global_path", 1000);
+    OptPathPub = node->create_publisher<nav_msgs::msg::Path>(
+        "/visualizer/opt_path", 1000);
+  }
+  void PubOptPath(std::vector<Eigen::Vector2d> &path) {
+    nav_msgs::msg::Path nav_path;
+    nav_path.header.frame_id = "world";
+    nav_path.header.stamp =
+        rclcpp::Clock().now(); // 或使用 node->get_clock()->now()
+
+    for (const auto &pt : path) {
+      geometry_msgs::msg::PoseStamped pose_stamped;
+      pose_stamped.header = nav_path.header; // 使用相同的帧ID和时间戳
+      pose_stamped.pose.position.x = pt.x();
+      pose_stamped.pose.position.y = pt.y();
+      pose_stamped.pose.position.z = 0.0;
+      pose_stamped.pose.orientation.x = 0.0;
+      pose_stamped.pose.orientation.y = 0.0;
+      pose_stamped.pose.orientation.z = 0.0;
+      pose_stamped.pose.orientation.w = 1.0; // 单位四元数（无旋转）
+
+      nav_path.poses.push_back(pose_stamped);
+    }
+
+    OptPathPub->publish(nav_path);
+  };
+  void PubGlobalPath(std::vector<Eigen::Vector2d> &path) {
+    nav_msgs::msg::Path nav_path;
+    nav_path.header.frame_id = "world";
+    nav_path.header.stamp =
+        rclcpp::Clock().now(); // 或使用 node->get_clock()->now()
+
+    for (const auto &pt : path) {
+      geometry_msgs::msg::PoseStamped pose_stamped;
+      pose_stamped.header = nav_path.header; // 使用相同的帧ID和时间戳
+      pose_stamped.pose.position.x = pt.x();
+      pose_stamped.pose.position.y = pt.y();
+      pose_stamped.pose.position.z = 0.0;
+      pose_stamped.pose.orientation.x = 0.0;
+      pose_stamped.pose.orientation.y = 0.0;
+      pose_stamped.pose.orientation.z = 0.0;
+      pose_stamped.pose.orientation.w = 1.0; // 单位四元数（无旋转）
+
+      nav_path.poses.push_back(pose_stamped);
+    }
+
+    GlobalPathPub->publish(nav_path);
+  };
+
+  // Visualize the trajectory and its front-end path
+  template <int D>
+  inline void visualize(const Trajectory<D> &traj,
+                        const std::vector<Eigen::Vector3d> &route) {
+    visualization_msgs::msg::Marker routeMarker, wayPointsMarker, trajMarker;
+
+    routeMarker.id = 0;
+    routeMarker.type = visualization_msgs::msg::Marker::LINE_LIST;
+    routeMarker.header.stamp = node->now();
+    routeMarker.header.frame_id = "world";
+    routeMarker.pose.orientation.w = 1.00;
+    routeMarker.action = visualization_msgs::msg::Marker::ADD;
+    routeMarker.ns = "route";
+    routeMarker.color.r = 1.00;
+    routeMarker.color.g = 0.00;
+    routeMarker.color.b = 0.00;
+    routeMarker.color.a = 1.00;
+    routeMarker.scale.x = 0.1;
+
+    wayPointsMarker = routeMarker;
+    wayPointsMarker.id = -wayPointsMarker.id - 1;
+    wayPointsMarker.type = visualization_msgs::msg::Marker::SPHERE_LIST;
+    wayPointsMarker.ns = "waypoints";
+    wayPointsMarker.color.r = 1.00;
+    wayPointsMarker.color.g = 0.00;
+    wayPointsMarker.color.b = 0.00;
+    wayPointsMarker.scale.x = 0.35;
+    wayPointsMarker.scale.y = 0.35;
+    wayPointsMarker.scale.z = 0.35;
+
+    trajMarker = routeMarker;
+    trajMarker.header.frame_id = "world";
+    trajMarker.id = 0;
+    trajMarker.ns = "trajectory";
+    trajMarker.color.r = 0.00;
+    trajMarker.color.g = 0.50;
+    trajMarker.color.b = 1.00;
+    trajMarker.scale.x = 0.30;
+
+    if (route.size() > 0) {
+      bool first = true;
+      Eigen::Vector3d last;
+      for (auto it : route) {
+        if (first) {
+          first = false;
+          last = it;
+          continue;
+        }
+        geometry_msgs::msg::Point point;
+
+        point.x = last(0);
+        point.y = last(1);
+        point.z = last(2);
+        routeMarker.points.push_back(point);
+        point.x = it(0);
+        point.y = it(1);
+        point.z = it(2);
+        routeMarker.points.push_back(point);
+        last = it;
+      }
+
+      routePub->publish(routeMarker);
+    }
+
+    if (traj.getPieceNum() > 0) {
+      Eigen::MatrixXd wps = traj.getPositions();
+      for (int i = 0; i < wps.cols(); i++) {
+        geometry_msgs::msg::Point point;
+        point.x = wps.col(i)(0);
+        point.y = wps.col(i)(1);
+        point.z = wps.col(i)(2);
+        wayPointsMarker.points.push_back(point);
+      }
+
+      wayPointsPub->publish(wayPointsMarker);
+    }
+
+    if (traj.getPieceNum() > 0) {
+      double T = 0.01;
+      Eigen::Vector3d lastX = traj.getPos(0.0);
+      for (double t = T; t < traj.getTotalDuration(); t += T) {
+        geometry_msgs::msg::Point point;
+        Eigen::Vector3d X = traj.getPos(t);
+        point.x = lastX(0);
+        point.y = lastX(1);
+        point.z = lastX(2);
+        trajMarker.points.push_back(point);
+        point.x = X(0);
+        point.y = X(1);
+        point.z = X(2);
+        trajMarker.points.push_back(point);
+        lastX = X;
+      }
+      // RCLCPP_INFO(node->get_logger(), "Visualizing trajectory with %d
+      // points", (int)trajMarker.points.size());
+      trajectoryPub->publish(trajMarker);
+    }
+  }
+
+  inline void visualizeMap(const std::vector<Eigen::Vector3d> &map,
+                           const std::string &frame_id = "world") {
+    if (!Mappub) {
+      spdlog::warn("map pub  empty");
+      return;
+    }
+    if (map.empty()) {
+      //spdlog::warn("map empty");
+      return;
+    }
+    // 创建 PointCloud2 消息
+    sensor_msgs::msg::PointCloud2 pcl_msg;
+
+    // 设置时间戳和坐标系
+    pcl_msg.header.stamp = rclcpp::Clock().now();
+    pcl_msg.header.frame_id = frame_id;
+
+    // 设置点云属性
+    pcl_msg.height = 1; // 无序点云
+    pcl_msg.width = map.size();
+    pcl_msg.is_dense = true; // 没有无效点
+    pcl_msg.is_bigendian = false;
+
+    // 定义点字段 (x, y, z)
+    pcl_msg.fields.resize(3);
+
+    // x 字段
+    pcl_msg.fields[0].name = "x";
+    pcl_msg.fields[0].offset = 0;
+    pcl_msg.fields[0].datatype = sensor_msgs::msg::PointField::FLOAT32;
+    pcl_msg.fields[0].count = 1;
+
+    // y 字段
+    pcl_msg.fields[1].name = "y";
+    pcl_msg.fields[1].offset = 4;
+    pcl_msg.fields[1].datatype = sensor_msgs::msg::PointField::FLOAT32;
+    pcl_msg.fields[1].count = 1;
+
+    // z 字段
+    pcl_msg.fields[2].name = "z";
+    pcl_msg.fields[2].offset = 8;
+    pcl_msg.fields[2].datatype = sensor_msgs::msg::PointField::FLOAT32;
+    pcl_msg.fields[2].count = 1;
+
+    // 计算点步长 (3个float = 12字节)
+    pcl_msg.point_step = 12;
+    pcl_msg.row_step = pcl_msg.point_step * pcl_msg.width;
+
+    // 分配数据空间
+    pcl_msg.data.resize(pcl_msg.row_step * pcl_msg.height);
+
+    // 填充数据
+    for (size_t i = 0; i < map.size(); ++i) {
+      float x = static_cast<float>(map[i].x());
+      float y = static_cast<float>(map[i].y());
+      float z = static_cast<float>(map[i].z());
+
+      memcpy(&pcl_msg.data[i * pcl_msg.point_step + 0], &x, sizeof(float));
+      memcpy(&pcl_msg.data[i * pcl_msg.point_step + 4], &y, sizeof(float));
+      memcpy(&pcl_msg.data[i * pcl_msg.point_step + 8], &z, sizeof(float));
+    }
+
+    // 发布消息
+    Mappub->publish(pcl_msg);
+  }
+  inline void visualizeSurfMap(const std::vector<Eigen::Vector3d> &surf_map,
+                               const std::string &frame_id = "world") {
+    if (!SurfMapPub) {
+      spdlog::warn("map pub  empty");
+      return;
+    }
+    if (surf_map.empty()) {
+      spdlog::warn("surf_map empty");
+      return;
+    }
+
+    // 创建 PointCloud2 消息
+    sensor_msgs::msg::PointCloud2 pcl_msg;
+
+    // 设置时间戳和坐标系
+    pcl_msg.header.stamp = rclcpp::Clock().now();
+    pcl_msg.header.frame_id = frame_id;
+
+    // 设置点云属性
+    pcl_msg.height = 1; // 无序点云
+    pcl_msg.width = surf_map.size();
+    pcl_msg.is_dense = true; // 没有无效点
+    pcl_msg.is_bigendian = false;
+
+    // 定义点字段 (x, y, z)
+    pcl_msg.fields.resize(3);
+
+    // x 字段
+    pcl_msg.fields[0].name = "x";
+    pcl_msg.fields[0].offset = 0;
+    pcl_msg.fields[0].datatype = sensor_msgs::msg::PointField::FLOAT32;
+    pcl_msg.fields[0].count = 1;
+
+    // y 字段
+    pcl_msg.fields[1].name = "y";
+    pcl_msg.fields[1].offset = 4;
+    pcl_msg.fields[1].datatype = sensor_msgs::msg::PointField::FLOAT32;
+    pcl_msg.fields[1].count = 1;
+
+    // z 字段
+    pcl_msg.fields[2].name = "z";
+    pcl_msg.fields[2].offset = 8;
+    pcl_msg.fields[2].datatype = sensor_msgs::msg::PointField::FLOAT32;
+    pcl_msg.fields[2].count = 1;
+
+    // 计算点步长 (3个float = 12字节)
+    pcl_msg.point_step = 12;
+    pcl_msg.row_step = pcl_msg.point_step * pcl_msg.width;
+
+    // 分配数据空间
+    pcl_msg.data.resize(pcl_msg.row_step * pcl_msg.height);
+
+    // 填充数据
+    for (size_t i = 0; i < surf_map.size(); ++i) {
+      float x = static_cast<float>(surf_map[i].x());
+      float y = static_cast<float>(surf_map[i].y());
+      float z = static_cast<float>(surf_map[i].z());
+
+      memcpy(&pcl_msg.data[i * pcl_msg.point_step + 0], &x, sizeof(float));
+      memcpy(&pcl_msg.data[i * pcl_msg.point_step + 4], &y, sizeof(float));
+      memcpy(&pcl_msg.data[i * pcl_msg.point_step + 8], &z, sizeof(float));
+    }
+
+    // 发布消息
+    SurfMapPub->publish(pcl_msg);
+  }
+  // Visualize some polytopes in H-representation
+  inline void visualizePolytope(const std::vector<Eigen::MatrixX4d> &hPolys) {
+
+    // Due to the fact that H-representation cannot be directly visualized
+    // We first conduct vertex enumeration of them, then apply quickhull
+    // to obtain triangle meshs of polyhedra
+    Eigen::Matrix3Xd mesh(3, 0), curTris(3, 0), oldTris(3, 0);
+    for (size_t id = 0; id < hPolys.size(); id++) {
+      oldTris = mesh;
+      Eigen::Matrix<double, 3, -1, Eigen::ColMajor> vPoly;
+      geo_utils::enumerateVs(hPolys[id], vPoly);
+
+      quickhull::QuickHull<double> tinyQH;
+      const auto polyHull =
+          tinyQH.getConvexHull(vPoly.data(), vPoly.cols(), false, true);
+      const auto &idxBuffer = polyHull.getIndexBuffer();
+      int hNum = idxBuffer.size() / 3;
+
+      curTris.resize(3, hNum * 3);
+      for (int i = 0; i < hNum * 3; i++) {
+        curTris.col(i) = vPoly.col(idxBuffer[i]);
+      }
+      mesh.resize(3, oldTris.cols() + curTris.cols());
+      mesh.leftCols(oldTris.cols()) = oldTris;
+      mesh.rightCols(curTris.cols()) = curTris;
+    }
+
+    // RVIZ support tris for visualization
+    visualization_msgs::msg::Marker meshMarker, edgeMarker;
+
+    meshMarker.id = 0;
+    meshMarker.header.stamp = node->now();
+    meshMarker.header.frame_id = "world";
+    meshMarker.pose.orientation.w = 1.00;
+    meshMarker.action = visualization_msgs::msg::Marker::ADD;
+    meshMarker.type = visualization_msgs::msg::Marker::TRIANGLE_LIST;
+    meshMarker.ns = "mesh";
+    meshMarker.color.r = 0.00;
+    meshMarker.color.g = 0.00;
+    meshMarker.color.b = 1.00;
+    meshMarker.color.a = 0.15;
+    meshMarker.scale.x = 1.0;
+    meshMarker.scale.y = 1.0;
+    meshMarker.scale.z = 1.0;
+
+    edgeMarker = meshMarker;
+    edgeMarker.type = visualization_msgs::msg::Marker::LINE_LIST;
+    edgeMarker.ns = "edge";
+    edgeMarker.color.r = 0.00;
+    edgeMarker.color.g = 1.00;
+    edgeMarker.color.b = 1.00;
+    edgeMarker.color.a = 1.00;
+    edgeMarker.scale.x = 0.02;
+
+    geometry_msgs::msg::Point point;
+
+    int ptnum = mesh.cols();
+
+    for (int i = 0; i < ptnum; i++) {
+      point.x = mesh(0, i);
+      point.y = mesh(1, i);
+      point.z = mesh(2, i);
+      meshMarker.points.push_back(point);
+    }
+
+    for (int i = 0; i < ptnum / 3; i++) {
+      for (int j = 0; j < 3; j++) {
+        point.x = mesh(0, 3 * i + j);
+        point.y = mesh(1, 3 * i + j);
+        point.z = mesh(2, 3 * i + j);
+        edgeMarker.points.push_back(point);
+        point.x = mesh(0, 3 * i + (j + 1) % 3);
+        point.y = mesh(1, 3 * i + (j + 1) % 3);
+        point.z = mesh(2, 3 * i + (j + 1) % 3);
+        edgeMarker.points.push_back(point);
+      }
+    }
+    // RCLCPP_INFO(node->get_logger(), "Visualizing mesh with %d points",
+    // ptnum);
+    meshPub->publish(meshMarker);
+    edgePub->publish(edgeMarker);
+
+    return;
+  }
+
+  // Visualize all spheres with centers sphs and the same radius
+  inline void visualizeSphere(const Eigen::Vector3d &center,
+                              const double &radius) {
+    visualization_msgs::msg::Marker sphereMarkers, sphereDeleter;
+
+    sphereMarkers.id = 0;
+    sphereMarkers.type = visualization_msgs::msg::Marker::SPHERE_LIST;
+    sphereMarkers.header.stamp = node->now();
+    sphereMarkers.header.frame_id = "world";
+    sphereMarkers.pose.orientation.w = 1.00;
+    sphereMarkers.action = visualization_msgs::msg::Marker::ADD;
+    sphereMarkers.ns = "spheres";
+    sphereMarkers.color.r = 0.00;
+    sphereMarkers.color.g = 0.00;
+    sphereMarkers.color.b = 1.00;
+    sphereMarkers.color.a = 1.00;
+    sphereMarkers.scale.x = radius * 2.0;
+    sphereMarkers.scale.y = radius * 2.0;
+    sphereMarkers.scale.z = radius * 2.0;
+
+    sphereDeleter = sphereMarkers;
+    sphereDeleter.action = visualization_msgs::msg::Marker::DELETE;
+
+    geometry_msgs::msg::Point point;
+    point.x = center(0);
+    point.y = center(1);
+    point.z = center(2);
+    sphereMarkers.points.push_back(point);
+    // RCLCPP_INFO(node->get_logger(), "Visualizing sphere with center (%.2f,
+    // %.2f, %.2f) and radius %.2f", center(0), center(1), center(2), radius);
+    spherePub->publish(sphereDeleter);
+    spherePub->publish(sphereMarkers);
+  }
+
+  inline void visualizeStartGoal(const Eigen::Vector3d &center,
+                                 const double &radius, const int sg) {
+    ;
+    // RCLCPP_INFO(node->get_logger(), "Visualizing start/goal point with
+    // position (%.2f, %.2f, %.2f)", center(0), center(1), center(2));
+    visualization_msgs::msg::Marker sphereMarkers, sphereDeleter;
+
+    sphereMarkers.id = sg;
+    sphereMarkers.type = visualization_msgs::msg::Marker::SPHERE_LIST;
+    sphereMarkers.header.stamp = node->now();
+    sphereMarkers.header.frame_id = "world";
+    sphereMarkers.pose.orientation.w = 1.00;
+    sphereMarkers.action = visualization_msgs::msg::Marker::ADD;
+    sphereMarkers.ns = "StartGoal";
+    sphereMarkers.color.r = 1.00;
+    sphereMarkers.color.g = 0.00;
+    sphereMarkers.color.b = 0.00;
+    sphereMarkers.color.a = 1.00;
+    sphereMarkers.scale.x = radius * 2.0;
+    sphereMarkers.scale.y = radius * 2.0;
+    sphereMarkers.scale.z = radius * 2.0;
+
+    sphereDeleter = sphereMarkers;
+    sphereDeleter.action = visualization_msgs::msg::Marker::DELETEALL;
+
+    geometry_msgs::msg::Point point;
+    point.x = center(0);
+    point.y = center(1);
+    point.z = center(2);
+    sphereMarkers.points.push_back(point);
+
+    if (sg == 0) {
+      spherePub->publish(sphereDeleter);
+      // TODO:何意味
+      std::this_thread::sleep_for(std::chrono::nanoseconds(1));
+      sphereMarkers.header.stamp = node->now();
+    }
+    spherePub->publish(sphereMarkers);
+  }
+};
+
+#endif

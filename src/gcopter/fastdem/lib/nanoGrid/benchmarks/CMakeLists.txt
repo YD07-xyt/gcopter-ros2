@@ -1,2 +1,0 @@
-add_executable(benchmark_iteration benchmark_iteration.cpp)
-target_link_libraries(benchmark_iteration PRIVATE nanoGrid::nanoGrid)
